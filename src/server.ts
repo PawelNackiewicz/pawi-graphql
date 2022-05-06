@@ -1,26 +1,33 @@
-import express from "express";
-import { graphqlHTTP } from "express-graphql";
-import { schema } from "./Schema";
-import cors from "cors";
+import { ApolloServer } from "apollo-server";
+import { getUser } from "./auth/auth";
+import { typeDefs } from "./typeDefs";
+import  {resolvers} from './resolvers'
+import { ReadableUser } from "./auth/types";
+import { PrismaClient } from "@prisma/client";
+import { Request, Response } from "express";
 
+const prisma = new PrismaClient()
+export interface Context {
+  prisma: PrismaClient,
+  user: ReadableUser,
+  req: Request,
+  res: Response
+}
 
-export const app = express();
-app.use(cors());
-app.use(express.json());
-app.use(
-    "/graphql",
-    graphqlHTTP({
-      schema,
-      graphiql: true,
-    })
-  );
+const server = new ApolloServer({ 
+  typeDefs,
+  resolvers,
+  cors: {
+    origin: ["http://localhost:3000"],
+    credentials: true,
+  },  
+  context: async({req, res}): Promise<Context> => {
+    const token = req.headers.cookie.replace('token=', '') || '';
+    const user = await getUser(token, prisma)
+    return {prisma, user, req, res}
+  },
+});
 
-export const start = () => {
-  app.listen(4001, () => {
-    console.log("server is started");
-  });
-
-  app.get('/', (_, res) => {
-    res.send('hello world')
-  })
-};
+server.listen().then(({ url }) => {
+  console.log(`🚀  Server ready at ${url}`);
+});
